@@ -2,10 +2,12 @@ package bilibili
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	bz "github.com/FloatTech/AnimeAPI/bilibili"
 	"github.com/FloatTech/floatbox/binary"
+	"github.com/FloatTech/floatbox/web"
 	"github.com/wdvxdr1123/ZeroBot/message"
 )
 
@@ -25,13 +27,13 @@ var (
 )
 
 // dynamicCard2msg 处理DynCard
-func dynamicCard2msg(dynamicCard *bz.DynamicCard) (msg []message.MessageSegment, err error) {
+func dynamicCard2msg(dynamicCard *bz.DynamicCard) (msg []message.Segment, err error) {
 	var (
 		card  bz.Card
 		vote  bz.Vote
 		cType int
 	)
-	msg = make([]message.MessageSegment, 0, 16)
+	msg = make([]message.Segment, 0, 16)
 	// 初始化结构体
 	err = json.Unmarshal(binary.StringToBytes(dynamicCard.Card), &card)
 	if err != nil {
@@ -50,7 +52,7 @@ func dynamicCard2msg(dynamicCard *bz.DynamicCard) (msg []message.MessageSegment,
 		msg = append(msg, message.Text(card.User.Uname, msgType[cType], "\n",
 			card.Item.Content, "\n",
 			"转发的内容: \n"))
-		var originMsg []message.MessageSegment
+		var originMsg []message.Segment
 		var co bz.Card
 		co, err = bz.LoadCardDetail(card.Origin)
 		if err != nil {
@@ -146,18 +148,18 @@ func dynamicCard2msg(dynamicCard *bz.DynamicCard) (msg []message.MessageSegment,
 }
 
 // card2msg cType=1, 2, 4, 8, 16, 64, 256, 2048, 4200, 4308时,处理Card字符串,cType为card类型
-func card2msg(dynamicCard *bz.DynamicCard, card *bz.Card, cType int) (msg []message.MessageSegment, err error) {
+func card2msg(dynamicCard *bz.DynamicCard, card *bz.Card, cType int) (msg []message.Segment, err error) {
 	var (
 		vote bz.Vote
 	)
-	msg = make([]message.MessageSegment, 0, 16)
+	msg = make([]message.Segment, 0, 16)
 	// 生成消息
 	switch cType {
 	case 1:
 		msg = append(msg, message.Text(card.User.Uname, msgType[cType], "\n",
 			card.Item.Content, "\n",
 			"转发的内容: \n"))
-		var originMsg []message.MessageSegment
+		var originMsg []message.Segment
 		var co bz.Card
 		co, err = bz.LoadCardDetail(card.Origin)
 		if err != nil {
@@ -253,7 +255,7 @@ func card2msg(dynamicCard *bz.DynamicCard, card *bz.Card, cType int) (msg []mess
 }
 
 // dynamicDetail 用动态id查动态信息
-func dynamicDetail(cookiecfg *bz.CookieConfig, dynamicIDStr string) (msg []message.MessageSegment, err error) {
+func dynamicDetail(cookiecfg *bz.CookieConfig, dynamicIDStr string) (msg []message.Segment, err error) {
 	dyc, err := bz.GetDynamicDetail(cookiecfg, dynamicIDStr)
 	if err != nil {
 		return
@@ -262,8 +264,8 @@ func dynamicDetail(cookiecfg *bz.CookieConfig, dynamicIDStr string) (msg []messa
 }
 
 // articleCard2msg 专栏转消息
-func articleCard2msg(card bz.Card, defaultID string) (msg []message.MessageSegment) {
-	msg = make([]message.MessageSegment, 0, 16)
+func articleCard2msg(card bz.Card, defaultID string) (msg []message.Segment) {
+	msg = make([]message.Segment, 0, 16)
 	for i := 0; i < len(card.OriginImageUrls); i++ {
 		msg = append(msg, message.Image(card.OriginImageUrls[i]))
 	}
@@ -274,8 +276,8 @@ func articleCard2msg(card bz.Card, defaultID string) (msg []message.MessageSegme
 }
 
 // liveCard2msg 直播卡片转消息
-func liveCard2msg(card bz.RoomCard) (msg []message.MessageSegment) {
-	msg = make([]message.MessageSegment, 0, 16)
+func liveCard2msg(card bz.RoomCard) (msg []message.Segment) {
+	msg = make([]message.Segment, 0, 16)
 	msg = append(msg, message.Image(card.RoomInfo.Keyframe))
 	msg = append(msg, message.Text("\n", card.RoomInfo.Title, "\n",
 		"主播: ", card.AnchorInfo.BaseInfo.Uname, "\n",
@@ -302,25 +304,39 @@ func liveCard2msg(card bz.RoomCard) (msg []message.MessageSegment) {
 }
 
 // videoCard2msg 视频卡片转消息
-func videoCard2msg(card bz.Card) (msg []message.MessageSegment, err error) {
-	var mCard bz.MemberCard
-	msg = make([]message.MessageSegment, 0, 16)
+func videoCard2msg(card bz.Card) (msg []message.Segment, err error) {
+	var (
+		mCard       bz.MemberCard
+		onlineTotal bz.OnlineTotal
+	)
+	msg = make([]message.Segment, 0, 16)
 	mCard, err = bz.GetMemberCard(card.Owner.Mid)
-	if err != nil {
-		return
-	}
 	msg = append(msg, message.Text("标题: ", card.Title, "\n"))
 	if card.Rights.IsCooperation == 1 {
 		for i := 0; i < len(card.Staff); i++ {
 			msg = append(msg, message.Text(card.Staff[i].Title, ": ", card.Staff[i].Name, " 粉丝: ", bz.HumanNum(card.Staff[i].Follower), "\n"))
 		}
 	} else {
-		msg = append(msg, message.Text("UP主: ", card.Owner.Name, " 粉丝: ", bz.HumanNum(mCard.Fans), "\n"))
+		if err != nil {
+			msg = append(msg, message.Text("UP主: ", card.Owner.Name, "\n"))
+		} else {
+			msg = append(msg, message.Text("UP主: ", card.Owner.Name, " 粉丝: ", bz.HumanNum(mCard.Fans), "\n"))
+		}
 	}
-	msg = append(msg, message.Text("播放: ", bz.HumanNum(card.Stat.View), " 弹幕: ", bz.HumanNum(card.Stat.Danmaku)))
 	msg = append(msg, message.Image(card.Pic))
-	msg = append(msg, message.Text("\n点赞: ", bz.HumanNum(card.Stat.Like), " 投币: ", bz.HumanNum(card.Stat.Coin), "\n",
-		"收藏: ", bz.HumanNum(card.Stat.Favorite), " 分享: ", bz.HumanNum(card.Stat.Share), "\n",
+	data, err := web.GetData(fmt.Sprintf(bz.OnlineTotalURL, card.BvID, card.CID))
+	if err != nil {
+		return
+	}
+	err = json.Unmarshal(data, &onlineTotal)
+	if err != nil {
+		return
+	}
+	msg = append(msg, message.Text("👀播放: ", bz.HumanNum(card.Stat.View), " 💬弹幕: ", bz.HumanNum(card.Stat.Danmaku),
+		"\n👍点赞: ", bz.HumanNum(card.Stat.Like), " 💰投币: ", bz.HumanNum(card.Stat.Coin),
+		"\n📁收藏: ", bz.HumanNum(card.Stat.Favorite), " 🔗分享: ", bz.HumanNum(card.Stat.Share),
+		"\n📝简介: ", card.Desc,
+		"\n🏄‍♂️ 总共 ", onlineTotal.Data.Total, " 人在观看，", onlineTotal.Data.Count, " 人在网页端观看\n",
 		bz.VURL, card.BvID, "\n\n"))
 	return
 }
